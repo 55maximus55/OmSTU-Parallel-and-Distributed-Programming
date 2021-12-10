@@ -19,28 +19,30 @@ public class Task5 {
         Map<String, ArrayList<String>> entities = new HashMap<>();
         Pattern pattern = Pattern.compile("(class|interface) +([A-Za-z]\\w*) *(<\\w+>)? *" +
                 "(extends +([A-Za-z]\\w*))? *(implements +([A-Za-z]\\w*))?", Pattern.MULTILINE);
-        ArrayList<String> data = ReadSourceFiles("");
+        ArrayList<String> data = readSourceFiles("");
         CountDownLatch cdl = new CountDownLatch(data.size());
         ExecutorService executorService = Executors.newFixedThreadPool(16);
-        ArrayList<Callable<Entity>> executorTasks = new ArrayList<>();
+        ArrayList<Callable<List<Entity>>> executorTasks = new ArrayList<>();
         data.forEach(file -> {
             executorTasks.add(() -> {
-                Entity entity = new Entity();
+                List<Entity> entityList = new ArrayList<>();
                 try {
                     Matcher matcher = pattern.matcher(file);
                     while (matcher.find()) {
+                        Entity entity = new Entity();
                         entity.name = matcher.group(2);
                         entity.parentClass = matcher.group(5);
                         entity.interfaces = matcher.group(7);
+                        entityList.add(entity);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
                 cdl.countDown();
-                return entity;
+                return entityList;
             });
         });
-        List<Future<Entity>> futures = null;
+        List<Future<List<Entity>>> futures = null;
         try {
             futures = executorService.invokeAll(executorTasks);
         } catch (InterruptedException e) {
@@ -57,10 +59,12 @@ public class Task5 {
         if (futures != null) {
             futures.forEach(future -> {
                 try {
-                    Entity entity = future.get();
-                    entities.put(entity.name, entities.getOrDefault(entity.name, new ArrayList<>()));
-                    addChildrenToParent(entities, entity.name, entity.parentClass);
-                    addChildrenToParent(entities, entity.name, entity.interfaces);
+                    List<Entity> result = future.get();
+                    for (Entity entity : result) {
+                        entities.put(entity.name, entities.getOrDefault(entity.name, new ArrayList<>()));
+                        addChildrenToParent(entities, entity.name, entity.parentClass);
+                        addChildrenToParent(entities, entity.name, entity.interfaces);
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -70,7 +74,7 @@ public class Task5 {
 
     }
 
-    public static ArrayList<String> ReadSourceFiles(String path) throws IOException {
+    public static ArrayList<String> readSourceFiles(String path) throws IOException {
         ArrayList<String> data = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(Paths.get(path))) {
             paths.filter(Files::isRegularFile)
